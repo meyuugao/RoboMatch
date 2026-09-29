@@ -6,12 +6,13 @@
 с KPI и экспорт отчётов (PDF / Excel / CSV). Гостевой демо-расчёт -
 без регистрации.
 
-| Что                    | Как                                                          |
-|------------------------|--------------------------------------------------------------|
-| Веб-интерфейс          | https://robomatch-frontend.onrender.com                      |
-| REST API + Swagger UI  | https://robomatch-backend.onrender.com/swagger-ui/index.html |
-| Каталог (открыт гостю) | https://robomatch-frontend.onrender.com/catalog              |
-| Гостевой демо-расчёт   | https://robomatch-frontend.onrender.com/demo                 |
+| Что                    | Как                                              |
+|------------------------|--------------------------------------------------|
+| Веб-интерфейс          | http://localhost:3000                            |
+| REST API + Swagger UI  | http://localhost:8080/swagger-ui.html            |
+| Каталог (открыт гостю) | http://localhost:3000/catalog                    |
+| Гостевой демо-расчёт   | http://localhost:3000/demo                       |
+| Админка БД (Adminer)   | http://localhost:8081 (db / postgres / postgres) |
 
 ## Документация
 
