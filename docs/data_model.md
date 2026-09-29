@@ -843,17 +843,17 @@ UNIQUE (project_id, name). Индексы: UNIQUE; (project_id).
 `'failed'`. Единственный 'running' = признак in-flight импорта: повторный
 запуск → 409; зависший после рестарта старше 15 минут помечается failed.
 
-| Поле              | Тип         | Ограничения                                  |
-|-------------------|-------------|----------------------------------------------|
-| id                | bigserial   | PK                                           |
-| file_name         | text        | NOT NULL - имя, как его назвал администратор |
-| file_path         | text        | NOT NULL - копия в data/admin-imports/{id}.{ext} (для refresh); имя пользователя в пути НЕ участвует |
-| size_bytes        | bigint      | NOT NULL - снимок размера (лимит 50 МБ → 413)|
-| started_at        | timestamptz | NOT NULL DEFAULT now()                       |
-| finished_at       | timestamptz | NULL (у running)                             |
-| status            | text        | NOT NULL DEFAULT 'running' CHECK ∈ {running, completed, failed} |
-| created_by_user_id| bigint      | NOT NULL, FK → user.id                       |
-| summary_json      | jsonb       | NULL - счётчики CatalogImportSummary (added/updated/skipped по сущностям) |
+| Поле               | Тип         | Ограничения                                                                                          |
+|--------------------|-------------|------------------------------------------------------------------------------------------------------|
+| id                 | bigserial   | PK                                                                                                   |
+| file_name          | text        | NOT NULL - имя, как его назвал администратор                                                         |
+| file_path          | text        | NOT NULL - копия в data/admin-imports/{id}.{ext} (для refresh); имя пользователя в пути НЕ участвует |
+| size_bytes         | bigint      | NOT NULL - снимок размера (лимит 50 МБ → 413)                                                        |
+| started_at         | timestamptz | NOT NULL DEFAULT now()                                                                               |
+| finished_at        | timestamptz | NULL (у running)                                                                                     |
+| status             | text        | NOT NULL DEFAULT 'running' CHECK ∈ {running, completed, failed}                                      |
+| created_by_user_id | bigint      | NOT NULL, FK → user.id                                                                               |
+| summary_json       | jsonb       | NULL - счётчики CatalogImportSummary (added/updated/skipped по сущностям)                            |
 
 Индексы: (started_at DESC) - история и «последний файл» для refresh.
 
