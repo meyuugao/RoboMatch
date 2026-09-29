@@ -38,8 +38,5 @@ USER robomatch
 
 COPY --from=build /home/gradle/src/build/libs/robomatch-backend-*.jar app.jar
 
-# DB_URL задаётся в docker-compose (имя хоста db, а не localhost!).
-ENV DB_URL=jdbc:postgresql://db:5432/robomatch
-
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

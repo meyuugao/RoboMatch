@@ -1,20 +1,37 @@
 services:
-  # Бэкенд
+  # Бэкенд (Spring Boot)
   - type: web
     name: robomatch-backend
     runtime: docker
     rootDir: backend
     dockerfilePath: ./Dockerfile
     plan: free
+    healthCheckPath: /api/solutions
     envVars:
-      - key: DB_URL
+      - key: DB_HOST
         fromDatabase:
           name: robomatch-db
-          property: connectionString
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: robomatch-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: robomatch-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: robomatch-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: robomatch-db
+          property: password
       - key: JWT_SECRET
-        generateValue: true # Render сгенерирует сам
+        generateValue: true
 
-  # Фронтенд
+  # Фронтенд (Next.js)
   - type: web
     name: robomatch-frontend
     runtime: docker
@@ -22,13 +39,15 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     envVars:
+      # ВНИМАНИЕ: подставь полный URL бэкенда после создания сервисов,
+      # с https:// и без завершающего слеша.
+      # Пример: https://robomatch-backend.onrender.com
+      # Render property host возвращает только домен, без схемы; BFF-роут
+      # фронта ждёт полный URL.
       - key: BACKEND_URL
-        fromService:
-          type: web
-          name: robomatch-backend
-          property: host
+        sync: false
 
-# База данных
+# База данных (Managed PostgreSQL)
 databases:
   - name: robomatch-db
     plan: free
