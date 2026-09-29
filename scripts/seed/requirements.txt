@@ -1,0 +1,15 @@
+# Seed-скрипт: зависимости Python 3.12+.
+# Верхняя граница — следующий мажор (guard от будущих ломающих изменений,
+# воспроизводимость: docker build ставит последние совместимые
+# версии, и некапнутый диапазон однажды принесёт мажор, который никто
+# не проверял. Проверено на: pandas 2.2.3 и 3.0.6, SQLAlchemy 2.0.54,
+# openpyxl 3.1.5, psycopg2-binary 2.9.13, python-dotenv 1.2.x, pytest 9.0.2 и 9.1.1.
+pandas>=2.0,<4           # чтение catalog_export_v4.csv
+openpyxl>=3.1,<4         # чтение Датасеты_хакатон.xlsx (кэш-значения формул)
+SQLAlchemy>=2.0,<3       # Core, INSERT .. ON CONFLICT
+psycopg2-binary>=2.9,<3  # драйвер PostgreSQL 16
+python-dotenv>=1.0.0,<2
+bcrypt>=4.0,<5           # хеши паролей демо-аккаунтов ($2b$, cost 12 — читает backend)
+
+# Тесты
+pytest>=8.0,<10

@@ -1,0 +1,58 @@
+scripts/seed/.env
+# __pycache__ на любой глубине ( */__pycache__ ловил только первый уровень)
+__pycache__/
+.gradle/
+build/
+node_modules/
+.next/
+*.log
+
+# Локальные переменные окружения — не коммитим (AGENTS.md §10).
+# Пример значений — в корневом .env.example.
+.env
+.env.local
+.env.*
+!.env.example
+
+# Ключи и креды — защита от случайного коммита (ревью среза 1);
+# в репозитории их быть не должно (AGENTS.md §10)
+*.pem
+*.key
+credentials.*
+
+# Локальное окружение seed (не коммитим)
+.venv/
+*.tsbuildinfo
+
+# Файлы вложений пользователей (срез «Параметры объекта») — данные,
+# не код; в репозитории только каркас каталога
+data/attachments/*
+!data/attachments/.gitkeep
+
+# Схемы имитаций (срез «Имитация», ТЗ 3.7.4): пользовательские файлы
+# не коммитятся, в репозитории только каркас каталога
+
+data/simulations/*
+!data/simulations/.gitkeep
+
+# Сгенерированные отчёты (срез «Экспорт», ТЗ 3.7.3): пользовательские
+# файлы не коммитятся; примеры итоговых отчётов живут в docs/examples
+data/exports/*
+!data/exports/.gitkeep
+# копии таблиц каталога организатора (срез «Админка», ТЗ 3.3.6 refresh)
+data/admin-imports/*
+!data/admin-imports/.gitkeep
+
+# Локальный корень загрузок backend (UPLOAD_ROOT по умолчанию —
+# ./data/attachments относительно backend/; ревью B-8): пользовательские
+# файлы не коммитятся, в репозитории только каркас data/attachments
+backend/data/
+
+# Байткод Python (*.pyc вне __pycache__) — артефакт запусков утилит
+*.pyc
+
+# Локальный lockfile bun (проект зафиксирован на npm ci по package-lock.json)
+frontend/bun.lock
+
+# Локальные настройки Gradle toolchain (пути JDK на машине разработчика)
+backend/gradle.properties

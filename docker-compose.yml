@@ -1,0 +1,176 @@
+# Docker Compose: поднимает RoboMatch ОДНОЙ командой.
+#
+#   docker compose up
+#
+# Из чистого клона репозитория поднимает весь стек: БД + админку + backend
+# + frontend + одноразовую загрузку полного каталога (seed). Флаги и ручные
+# шаги не нужны (requirements/nonfunctional.md; mvp_scope.md
+# «Архитектура и инфраструктура»). Первый запуск собирает образы — это минуты;
+# дальше кэш слоёв делает пересборку быстрой.
+#
+# Переменные: docker compose автоматически читает корневой .env (если есть;
+# см. .env.example). Без .env работают дефолты ниже — они рассчитаны на
+# локальную разработку и демо, реальных секретов не содержат.
+#
+# ВАЖНО (воспроизводимость): compose НЕ пересобирает уже собранные
+# образы сам. После git pull запускайте с пересборкой:
+#   docker compose up -d --build
+# иначе контейнеры поедут на устаревшем коде из ранее собранных образов
+# (кэш слоёв делает пересборку быстрой — заново собираются только
+# изменившиеся слои).
+#
+# Сервисы:
+# - db       — PostgreSQL 16 (запинено 16.15 — минор фиксирован ради
+#              воспроизводимости; мажор соответствует стеку в docs/architecture.md).
+#              Схема применяется Flyway'ем при старте backend: V1 (29 таблиц)
+#              + V2 (8 демо-строк). ПОЛНЫЙ каталог (187 решений из CSV/XLSX
+#              организатора) + дозаполненные ТТХ (characteristics.json внутри
+#              образа seed) грузит сервис seed.
+# - adminer  — веб-админка БД: http://localhost:8081 (запинено 6.0.1)
+#              (СУБД PostgreSQL, сервер db, логин/пароль — из переменных).
+# - backend  — Spring Boot: http://localhost:8080,
+#              Swagger UI: http://localhost:8080/swagger-ui.html.
+# - frontend — Next.js: http://localhost:3000, каталог /catalog.
+# - seed     — одноразовый импорт (идемпотентен). В `docker compose ps`
+#              завершённый (Exited 0) контейнер seed — норма, не ошибка.
+
+services:
+  db:
+    # Пин полного минора: тег 16.15 неизменяем (воспроизводимость сборки,
+    # воспроизводимость); «голый» postgres:16 «плыл» бы на минорных релизах.
+    image: postgres:16.15
+    container_name: robomatch-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-robomatch}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"          # доступ с хоста для psql и python-seed
+    volumes:
+      - pgdata:/var/lib/postgresql/data   # данные переживают restart
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-robomatch}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  adminer:
+    # Пин версии вместо latest (architecture.md §11): latest в любой момент
+    # может стать мажорным обновлением и сломать демо. 6.0.1 — текущий
+    # стабильный релиз (дайджест совпадает с latest на момент пина).
+    image: adminer:6.0.1
+    container_name: robomatch-adminer
+    ports:
+      - "8081:8080"
+    depends_on:
+      - db
+
+  backend:
+    build: ./backend
+    container_name: robomatch-backend
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-robomatch}   # хост = имя сервиса db
+      DB_USERNAME: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      # Секрет JWT обязателен (fail-fast): без него compose не стартует,
+      # а backend — тем более (JwtService проверяет длину >= 32 байт).
+      # Дефолта НЕТ намеренно — сгенерируйте: openssl rand -base64 48
+      JWT_SECRET: ${JWT_SECRET:?Задайте JWT_SECRET в .env (см. .env.example)}
+      JWT_TTL_HOURS: ${JWT_TTL_HOURS:-24}
+      # Хранилище вложений: том ниже
+      # сохраняет файлы между перезапусками контейнера; лимит загрузки —
+      # один источник правды для servlet и сервисной проверки.
+      # ВНИМАНИЕ (Linux-хост): backend работает от пользователя 1001
+      # (non-root), bind-каталог должен принадлежать ему, иначе загрузки
+      # упадут по правам: sudo chown -R 1001:1001 data/attachments
+      # (Docker Desktop сам разруливает права — там не требуется).
+      UPLOAD_ROOT: /app/data/attachments
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-10485760}
+      # Схемы имитаций — тот же паттерн томов
+      SIM_ROOT: /app/data/simulations
+      # Сгенерированные отчёты — тот же паттерн:
+      # PDF/XLSX/CSV переживают перезапуск контейнера, удаляются вместе
+      # с проектом; права bind-каталога — как у attachments (1001)
+      EXPORT_ROOT: /app/data/exports
+      # Копии таблиц каталога (для обновления по запросу):
+      # том нужен для «обновить по запросу» — refresh повторяет импорт
+      # последнего сохранённого файла (без тома — 400 после пересоздания
+      # контейнера). Права bind-каталога — как выше (1001)
+      ADMIN_IMPORT_ROOT: /app/data/admin-imports
+      # Лимит файла каталога — 50 МБ, НЕ зависит от лимита
+      # вложений UPLOAD_MAX_BYTES
+      ADMIN_IMPORT_MAX_BYTES: ${ADMIN_IMPORT_MAX_BYTES:-52428800}
+      # Servlet-потолок multipart — независимая настройка: это грубый
+      # первый гейт, точные лимиты (вложения 10 МБ / каталог 50 МБ)
+      # проверяет сервисный слой по назначению
+      SERVLET_MAX_FILE_SIZE: ${SERVLET_MAX_FILE_SIZE:-50MB}
+    volumes:
+      - ./data/attachments:/app/data/attachments
+      - ./data/simulations:/app/data/simulations
+      - ./data/exports:/app/data/exports
+      - ./data/admin-imports:/app/data/admin-imports
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy   # ждём готовности БД до старта Spring
+    healthcheck:
+      # Зонд готовности: GET /api/solutions (permitAll). Spring начинает
+      # отвечать ТОЛЬКО после полного старта, включая Flyway, — значит
+      # HTTP 200 = «схема применена, приложение живо». curl ставится
+      # в backend/Dockerfile именно для этого зонда.
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/api/solutions > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12          # первый старт: Flyway + прогрев Spring
+      start_period: 40s
+
+  frontend:
+    build: ./frontend
+    container_name: robomatch-frontend
+    environment:
+      # BFF-роуты (app/api/*/route.ts) ходят на backend по имени
+      # сервиса внутри docker-сети — не localhost!
+      BACKEND_URL: http://backend:8080
+      # Cookie сессии: secure только по явному флагу (демо работает по http,
+      # а NODE_ENV в контейнере всегда production — см. lib/auth.ts).
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Срок cookie сессии, сек (по умолчанию 24 ч = TTL JWT)
+      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-86400}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy   # не отдаём UI раньше готового API
+      seed:
+        condition: service_completed_successfully  # и раньше полного каталога
+    healthcheck:
+      # Зонд готовности: GET / главной страницы standalone-сервера Next.js.
+      # curl/wget в node:24-alpine нет — используем встроенный fetch Node 24.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  seed:
+    build: ./scripts/seed
+    container_name: robomatch-seed
+    environment:
+      # SQLAlchemy-формат для scripts/seed (config.py: DATABASE_URL)
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-robomatch}
+      # Источники организатора — read-only том (config.py понимает env-пути).
+      # ТТХ для дозаполнения (data/characteristics.json) — внутри образа:
+      # scripts/seed/Dockerfile копирует весь каталог seed; config.py ищет
+      # его и относительно /seed (контейнер), и относительно корня репо.
+      CATALOG_CSV: /source/catalog_export_v4.csv
+      OBJECTS_XLSX: "/source/Датасеты_хакатон.xlsx"
+    volumes:
+      - ./docs/source:/source:ro
+    depends_on:
+      backend:
+        condition: service_healthy   # схему должен применить Flyway
+    restart: "no"          # одноразовый: запустился и завершился
+
+volumes:
+  pgdata:

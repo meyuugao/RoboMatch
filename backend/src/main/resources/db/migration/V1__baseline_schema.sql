@@ -1,0 +1,1255 @@
+-- V1: базлайн схемы БД RoboMatch.
+-- ИСТОЧНИК ПРАВДЫ: scripts/seed/schema.psql (дословная копия, обе части — 28 таблиц).
+-- Flyway применит этот скрипт один раз и запомнит в flyway_schema_history.
+-- Изменения схемы далее — только НОВЫМИ миграциями (V3, V4...), этот файл не править.
+-- Примечание: CREATE EXTENSION pg_trgm требует прав суперпользователя;
+-- в docker-compose пользователь postgres — суперпользователь (ок для хакатона).
+
+-- Схема БД: каталог решений, параметры объектов, домены пользователя
+-- Источник: docs/data_model.md
+-- Применить: psql -U postgres -d robot_platform -f scripts/seed/schema.psql
+
+-- Поиск по названиям решений (data_model.md п.2.1: GIN по name, pg_trgm)
+CREATE
+EXTENSION IF NOT EXISTS pg_trgm;
+
+-- Справочники
+CREATE TABLE IF NOT EXISTS industry
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    code
+    text
+    NOT
+    NULL
+    UNIQUE,
+    name
+    text
+    NOT
+    NULL
+    UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS vendor
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    name
+    text
+    NOT
+    NULL
+    UNIQUE,
+    created_at
+    timestamptz
+    NOT
+    NULL
+    DEFAULT
+    now
+(
+)
+    );
+
+CREATE TABLE IF NOT EXISTS region
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    code
+    text
+    NOT
+    NULL
+    UNIQUE,
+    name
+    text
+    NOT
+    NULL
+    UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS solution_type
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    code
+    text
+    NOT
+    NULL
+    UNIQUE,
+    name
+    text
+    NOT
+    NULL
+    UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS solution_subtype
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    code
+    text
+    NOT
+    NULL
+    UNIQUE,
+    name
+    text
+    NOT
+    NULL
+    UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS process
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    code
+    text
+    NOT
+    NULL
+    UNIQUE,
+    name
+    text
+    NOT
+    NULL
+    UNIQUE,
+    is_active
+    boolean
+    NOT
+    NULL
+    DEFAULT
+    true
+);
+
+CREATE TABLE IF NOT EXISTS object_type
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    code
+    text
+    NOT
+    NULL
+    UNIQUE,
+    name
+    text
+    NOT
+    NULL,
+    is_calc_enabled
+    boolean
+    NOT
+    NULL
+    DEFAULT
+    false,
+    data_source_note
+    text
+);
+
+CREATE TABLE IF NOT EXISTS parameter_type
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    code
+    text
+    NOT
+    NULL
+    UNIQUE,
+    name
+    text
+    NOT
+    NULL,
+    unit
+    text,
+    value_type
+    text
+    NOT
+    NULL
+    CHECK (
+    value_type
+    IN
+(
+    'number',
+    'boolean',
+    'text'
+))
+    );
+
+-- Каталог решений
+CREATE TABLE IF NOT EXISTS solution
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    external_id
+    uuid
+    UNIQUE,
+    name
+    text
+    NOT
+    NULL,
+    vendor_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    vendor
+(
+    id
+),
+    product_class text NOT NULL CHECK
+(
+    product_class
+    IN
+(
+    'brs',
+    'bas',
+    'software'
+)),
+    solution_type_id bigint REFERENCES solution_type
+(
+    id
+),
+    solution_subtype_id bigint REFERENCES solution_subtype
+(
+    id
+),
+    region_id bigint REFERENCES region
+(
+    id
+),
+    status text NOT NULL CHECK
+(
+    status
+    IN
+(
+    'operation',
+    'piloting',
+    'rnd'
+)),
+    description text,
+    price_rub numeric
+(
+    15,
+    2
+) NOT NULL,
+    trl smallint CHECK
+(
+    trl
+    BETWEEN
+    1
+    AND
+    9
+),
+    market_potential numeric
+(
+    3,
+    1
+) CHECK
+(
+    market_potential
+    BETWEEN
+    2
+    AND
+    5
+),
+    payload_kg numeric
+(
+    12,
+    3
+),
+    mass_kg numeric
+(
+    12,
+    3
+),
+    length_mm numeric
+(
+    12,
+    3
+),
+    width_mm numeric
+(
+    12,
+    3
+),
+    height_mm numeric
+(
+    12,
+    3
+),
+    positioning_accuracy_mm numeric
+(
+    12,
+    3
+),
+    speed_m_s numeric
+(
+    12,
+    3
+),
+    charging_power_kw numeric
+(
+    12,
+    3
+),
+    noise_level_dba numeric
+(
+    12,
+    3
+),
+    completeness_pct smallint CHECK
+(
+    completeness_pct
+    BETWEEN
+    0
+    AND
+    100
+),
+    source_kind text NOT NULL DEFAULT 'organizer_catalog'
+    CHECK
+(
+    source_kind
+    IN
+(
+    'organizer_catalog',
+    'open_source',
+    'manual'
+)),
+    source_url text,
+    source_date date,
+    created_at timestamptz NOT NULL DEFAULT now
+(
+),
+    updated_at timestamptz NOT NULL DEFAULT now
+(
+),
+    UNIQUE
+(
+    vendor_id,
+    name
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_solution_vendor_id ON solution(vendor_id);
+CREATE INDEX IF NOT EXISTS idx_solution_type_id ON solution(solution_type_id);
+CREATE INDEX IF NOT EXISTS idx_solution_subtype_id ON solution(solution_subtype_id);
+CREATE INDEX IF NOT EXISTS idx_solution_region_id ON solution(region_id);
+CREATE INDEX IF NOT EXISTS idx_solution_status ON solution(status);
+CREATE INDEX IF NOT EXISTS idx_solution_price_rub ON solution(price_rub);
+CREATE INDEX IF NOT EXISTS idx_solution_payload_kg ON solution(payload_kg);
+CREATE INDEX IF NOT EXISTS idx_solution_mass_kg ON solution(mass_kg);
+CREATE INDEX IF NOT EXISTS idx_solution_width_mm ON solution(width_mm);
+CREATE INDEX IF NOT EXISTS idx_solution_trl ON solution(trl);
+CREATE INDEX IF NOT EXISTS idx_solution_name_trgm ON solution USING GIN (name gin_trgm_ops);
+
+CREATE TABLE IF NOT EXISTS solution_application
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    solution_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    solution
+(
+    id
+) ON DELETE CASCADE,
+    industry_id bigint NOT NULL REFERENCES industry
+(
+    id
+),
+    process_id bigint NOT NULL REFERENCES process
+(
+    id
+),
+    offer_price_rub numeric
+(
+    15,
+    2
+),
+    created_at timestamptz NOT NULL DEFAULT now
+(
+),
+    UNIQUE
+(
+    solution_id,
+    industry_id,
+    process_id
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_app_industry_process ON solution_application(industry_id, process_id);
+CREATE INDEX IF NOT EXISTS idx_app_solution_id ON solution_application(solution_id);
+
+CREATE TABLE IF NOT EXISTS characteristic_type
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    code
+    text
+    NOT
+    NULL
+    UNIQUE,
+    name
+    text
+    NOT
+    NULL,
+    group_code
+    text
+    NOT
+    NULL
+    CHECK (
+    group_code
+    IN
+(
+    'identification',
+    'technical',
+    'infrastructure',
+    'economic',
+    'applicability',
+    'data_quality'
+)),
+    data_type text NOT NULL CHECK
+(
+    data_type
+    IN
+(
+    'number',
+    'text',
+    'boolean',
+    'date'
+)),
+    unit text,
+    is_filterable boolean NOT NULL DEFAULT false,
+    is_required boolean NOT NULL DEFAULT false,
+    sort_order integer NOT NULL DEFAULT 0
+    );
+
+CREATE INDEX IF NOT EXISTS idx_char_type_group ON characteristic_type(group_code, sort_order);
+
+CREATE TABLE IF NOT EXISTS solution_characteristic
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    solution_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    solution
+(
+    id
+) ON DELETE CASCADE,
+    characteristic_type_id bigint NOT NULL REFERENCES characteristic_type
+(
+    id
+),
+    value_numeric numeric
+(
+    14,
+    4
+),
+    value_text text,
+    value_bool boolean,
+    value_date date,
+    source_kind text NOT NULL DEFAULT 'manual'
+    CHECK
+(
+    source_kind
+    IN
+(
+    'organizer_catalog',
+    'open_source',
+    'manual'
+)),
+    source_url text,
+    source_date date,
+    is_confirmed boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now
+(
+),
+    updated_at timestamptz NOT NULL DEFAULT now
+(
+),
+    UNIQUE
+(
+    solution_id,
+    characteristic_type_id
+),
+    CONSTRAINT solution_characteristic_one_value_check CHECK
+(
+(
+    value_numeric
+    IS
+    NOT
+    NULL
+):: int
+    +
+(
+    value_text
+    IS
+    NOT
+    NULL
+):: int
+    +
+(
+    value_bool
+    IS
+    NOT
+    NULL
+):: int
+    +
+(
+    value_date
+    IS
+    NOT
+    NULL
+):: int = 1)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_char_solution_id ON solution_characteristic(solution_id);
+CREATE INDEX IF NOT EXISTS idx_char_type_num
+    ON solution_characteristic(characteristic_type_id, value_numeric)
+    WHERE value_numeric IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS solution_case
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    name
+    text
+    NOT
+    NULL
+    UNIQUE,
+    description
+    text,
+    source_url
+    text,
+    source_date
+    date,
+    created_at
+    timestamptz
+    NOT
+    NULL
+    DEFAULT
+    now
+(
+),
+    updated_at timestamptz NOT NULL DEFAULT now
+(
+)
+    );
+
+CREATE TABLE IF NOT EXISTS solution_case_link
+(
+    solution_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    solution
+(
+    id
+) ON DELETE CASCADE,
+    case_id bigint NOT NULL REFERENCES solution_case
+(
+    id
+)
+  ON DELETE CASCADE,
+    PRIMARY KEY
+(
+    solution_id,
+    case_id
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_case_link_case_id ON solution_case_link(case_id);
+
+CREATE TABLE IF NOT EXISTS solution_type_subtype_mapping
+(
+    solution_type_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    solution_type
+(
+    id
+) ON DELETE CASCADE,
+    solution_subtype_id bigint NOT NULL REFERENCES solution_subtype
+(
+    id
+)
+  ON DELETE CASCADE,
+    source_note text,
+    PRIMARY KEY
+(
+    solution_type_id,
+    solution_subtype_id
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_type_subtype_subtype ON solution_type_subtype_mapping(solution_subtype_id);
+
+-- Параметры объектов
+CREATE TABLE IF NOT EXISTS object_type_industry
+(
+    object_type_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    object_type
+(
+    id
+) ON DELETE CASCADE,
+    industry_id bigint NOT NULL REFERENCES industry
+(
+    id
+),
+    source_note text NOT NULL,
+    PRIMARY KEY
+(
+    object_type_id,
+    industry_id
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_oti_industry ON object_type_industry(industry_id);
+
+CREATE TABLE IF NOT EXISTS object_type_parameter
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    object_type_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    object_type
+(
+    id
+) ON DELETE CASCADE,
+    parameter_type_id bigint NOT NULL REFERENCES parameter_type
+(
+    id
+),
+    group_name text NOT NULL,
+    is_required boolean NOT NULL DEFAULT false,
+    default_value_numeric numeric
+(
+    16,
+    4
+),
+    default_value_text text,
+    default_value_bool boolean,
+    min_value numeric
+(
+    16,
+    4
+),
+    max_value numeric
+(
+    16,
+    4
+),
+    source_note text,
+    UNIQUE
+(
+    object_type_id,
+    parameter_type_id
+),
+    CHECK
+(
+(
+    default_value_numeric
+    IS
+    NOT
+    NULL
+):: int
+    +
+(
+    default_value_text
+    IS
+    NOT
+    NULL
+):: int
+    +
+(
+    default_value_bool
+    IS
+    NOT
+    NULL
+):: int = 1),
+    CHECK
+(
+    min_value
+    IS
+    NULL
+    OR
+    max_value
+    IS
+    NULL
+    OR
+    min_value
+    <=
+    max_value
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_otp_object_type ON object_type_parameter(object_type_id);
+-- ============================================================================
+-- Часть 2: домены пользователя (docs/data_model.md, разделы 8-12)
+-- user, project, project_parameter_value, project_attachment, scenario,
+-- scenario_solution, selection_result, calculation, calculation_assumption,
+-- manual_adjustment, simulation_result, export
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS "user"
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    login
+    text
+    NOT
+    NULL
+    UNIQUE,
+    password_hash
+    text
+    NOT
+    NULL,
+    role
+    text
+    NOT
+    NULL
+    DEFAULT
+    'user'
+    CHECK (
+    role
+    IN
+(
+    'guest',
+    'user',
+    'admin'
+)),
+    created_at timestamptz NOT NULL DEFAULT now
+(
+)
+    );
+
+CREATE TABLE IF NOT EXISTS project
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    user_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    "user"
+(
+    id
+) ON DELETE CASCADE,
+    object_type_id bigint NOT NULL REFERENCES object_type
+(
+    id
+),
+    name text NOT NULL,
+    description text,
+    status text NOT NULL DEFAULT 'draft'
+    CHECK
+(
+    status
+    IN
+(
+    'draft',
+    'active',
+    'archived'
+)),
+    created_at timestamptz NOT NULL DEFAULT now
+(
+),
+    updated_at timestamptz NOT NULL DEFAULT now
+(
+),
+    UNIQUE
+(
+    user_id,
+    name
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_project_user_id ON project(user_id);
+CREATE INDEX IF NOT EXISTS idx_project_object_type ON project(object_type_id);
+
+CREATE TABLE IF NOT EXISTS project_parameter_value
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    project_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    project
+(
+    id
+) ON DELETE CASCADE,
+    object_type_parameter_id bigint NOT NULL REFERENCES object_type_parameter
+(
+    id
+),
+    value_numeric numeric
+(
+    16,
+    4
+),
+    value_text text,
+    value_bool boolean,
+    source text NOT NULL DEFAULT 'manual'
+    CHECK
+(
+    source
+    IN
+(
+    'manual',
+    'import'
+)),
+    updated_at timestamptz NOT NULL DEFAULT now
+(
+),
+    UNIQUE
+(
+    project_id,
+    object_type_parameter_id
+),
+    CONSTRAINT ppv_one_value_check CHECK
+(
+(
+    value_numeric
+    IS
+    NOT
+    NULL
+):: int
+    +
+(
+    value_text
+    IS
+    NOT
+    NULL
+):: int
+    +
+(
+    value_bool
+    IS
+    NOT
+    NULL
+):: int = 1)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_ppv_project ON project_parameter_value(project_id);
+
+CREATE TABLE IF NOT EXISTS project_attachment
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    project_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    project
+(
+    id
+) ON DELETE CASCADE,
+    file_name text NOT NULL,
+    file_path text NOT NULL,
+    mime_type text,
+    size_bytes bigint CHECK
+(
+    size_bytes
+    IS
+    NULL
+    OR
+    size_bytes
+    >=
+    0
+),
+    uploaded_at timestamptz NOT NULL DEFAULT now
+(
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_attachment_project ON project_attachment(project_id);
+
+CREATE TABLE IF NOT EXISTS scenario
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    project_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    project
+(
+    id
+) ON DELETE CASCADE,
+    type text NOT NULL CHECK
+(
+    type
+    IN
+(
+    'base',
+    'purchase',
+    'raas'
+)),
+    name text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now
+(
+),
+    updated_at timestamptz NOT NULL DEFAULT now
+(
+),
+    UNIQUE
+(
+    project_id,
+    name
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_scenario_project ON scenario(project_id);
+
+CREATE TABLE IF NOT EXISTS scenario_solution
+(
+    scenario_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    scenario
+(
+    id
+) ON DELETE CASCADE,
+    solution_id bigint NOT NULL REFERENCES solution
+(
+    id
+),
+    quantity integer NOT NULL DEFAULT 1 CHECK
+(
+    quantity >
+    0
+),
+    is_manual boolean NOT NULL DEFAULT false,
+    manual_reason text,
+    created_at timestamptz NOT NULL DEFAULT now
+(
+),
+    PRIMARY KEY
+(
+    scenario_id,
+    solution_id
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_scenario_solution_solution ON scenario_solution(solution_id);
+
+CREATE TABLE IF NOT EXISTS selection_result
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    project_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    project
+(
+    id
+) ON DELETE CASCADE,
+    solution_id bigint NOT NULL REFERENCES solution
+(
+    id
+),
+    status text NOT NULL CHECK
+(
+    status
+    IN
+(
+    'fit',
+    'needs_check',
+    'excluded'
+)),
+    reason text,
+    rank integer CHECK
+(
+    rank
+    IS
+    NULL
+    OR
+    rank
+    >=
+    1
+),
+    created_at timestamptz NOT NULL DEFAULT now
+(
+),
+    UNIQUE
+(
+    project_id,
+    solution_id
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_selection_project_status ON selection_result(project_id, status);
+CREATE INDEX IF NOT EXISTS idx_selection_solution ON selection_result(solution_id);
+
+CREATE TABLE IF NOT EXISTS calculation
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    scenario_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    scenario
+(
+    id
+) ON DELETE CASCADE,
+    version_data text NOT NULL,
+    version_model text NOT NULL,
+    calculated_at timestamptz NOT NULL DEFAULT now
+(
+),
+    total_capex numeric
+(
+    18,
+    2
+),
+    total_opex numeric
+(
+    18,
+    2
+),
+    opex_delta_rub numeric
+(
+    18,
+    2
+),
+    effect_year numeric
+(
+    18,
+    2
+),
+    payback_years numeric
+(
+    10,
+    2
+),
+    roi_pct numeric
+(
+    7,
+    2
+),
+    tco_rub numeric
+(
+    18,
+    2
+),
+    metrics_json jsonb
+    );
+
+CREATE INDEX IF NOT EXISTS idx_calculation_scenario
+    ON calculation(scenario_id, calculated_at DESC);
+
+CREATE TABLE IF NOT EXISTS calculation_assumption
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    calculation_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    calculation
+(
+    id
+) ON DELETE CASCADE,
+    name text NOT NULL,
+    value text NOT NULL,
+    unit text,
+    source_kind text NOT NULL DEFAULT 'manual'
+    CHECK
+(
+    source_kind
+    IN
+(
+    'organizer_catalog',
+    'open_source',
+    'manual'
+)),
+    source_url text,
+    source_date date,
+    impact_note text,
+    UNIQUE
+(
+    calculation_id,
+    name
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_assumption_calculation ON calculation_assumption(calculation_id);
+
+CREATE TABLE IF NOT EXISTS manual_adjustment
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    calculation_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    calculation
+(
+    id
+) ON DELETE CASCADE,
+    metric_name text NOT NULL,
+    original_value numeric
+(
+    18,
+    4
+),
+    new_value numeric
+(
+    18,
+    4
+) NOT NULL,
+    reason text NOT NULL,
+    author_user_id bigint NOT NULL REFERENCES "user"
+(
+    id
+),
+    created_at timestamptz NOT NULL DEFAULT now
+(
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_adjustment_calculation ON manual_adjustment(calculation_id);
+CREATE INDEX IF NOT EXISTS idx_adjustment_author ON manual_adjustment(author_user_id);
+
+CREATE TABLE IF NOT EXISTS simulation_result
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    scenario_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    scenario
+(
+    id
+) ON DELETE CASCADE,
+    kpi_json jsonb,
+    started_at timestamptz NOT NULL DEFAULT now
+(
+),
+    finished_at timestamptz,
+    status text NOT NULL DEFAULT 'running'
+    CHECK
+(
+    status
+    IN
+(
+    'running',
+    'completed',
+    'failed'
+))
+    );
+
+CREATE INDEX IF NOT EXISTS idx_simulation_scenario ON simulation_result(scenario_id);
+CREATE INDEX IF NOT EXISTS idx_simulation_running
+    ON simulation_result(status) WHERE status = 'running';
+
+CREATE TABLE IF NOT EXISTS export
+(
+    id
+    bigserial
+    PRIMARY
+    KEY,
+    project_id
+    bigint
+    NOT
+    NULL
+    REFERENCES
+    project
+(
+    id
+) ON DELETE CASCADE,
+    format text NOT NULL CHECK
+(
+    format
+    IN
+(
+    'pdf',
+    'xlsx',
+    'csv'
+)),
+    file_path text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now
+(
+),
+    created_by_user_id bigint NOT NULL REFERENCES "user"
+(
+    id
+)
+    );
+
+CREATE INDEX IF NOT EXISTS idx_export_project ON export(project_id);
+CREATE INDEX IF NOT EXISTS idx_export_user ON export(created_by_user_id);
