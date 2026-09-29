@@ -6,15 +6,14 @@
 с KPI и экспорт отчётов (PDF / Excel / CSV). Гостевой демо-расчёт -
 без регистрации.
 
-| Что | Как |
-|---|---|
-| Веб-интерфейс | http://localhost:3000 |
-| REST API + Swagger UI | http://localhost:8080/swagger-ui.html |
-| Каталог (открыт гостю) | http://localhost:3000/catalog |
-| Гостевой демо-расчёт | http://localhost:3000/demo |
-| Админка БД (Adminer) | http://localhost:8081 (db / postgres / postgres) |
+| Что                    | Как                                                          |
+|------------------------|--------------------------------------------------------------|
+| Веб-интерфейс          | https://robomatch-frontend.onrender.com                      |
+| REST API + Swagger UI  | https://robomatch-backend.onrender.com/swagger-ui/index.html |
+| Каталог (открыт гостю) | https://robomatch-frontend.onrender.com/catalog              |
+| Гостевой демо-расчёт   | https://robomatch-frontend.onrender.com/demo                 |
 
-## Быстрый старт (Docker)
+## Быстрый старт (локальное развёртывание через Docker)
 
 Требуется только Docker. Свободные порты: 3000, 8080, 8081, 5432.
 
@@ -65,11 +64,11 @@ compose up -d --build`. Повторный `up` прогоняет seed зано
 
 ## Роли и демо-аккаунты
 
-| Роль | Логин / пароль | Возможности |
-|---|---|---|
-| Гость | без входа | каталог и сравнение решений; демо-расчёт на /demo (в памяти, ничего не сохраняется) |
-| Пользователь | `user` / `useruser` | проекты, параметры, подбор, экономика, имитация, экспорт |
-| Администратор | `admin` / `adminadmin` | всё выше + раздел «Управление» (каталог, справочники, импорт) |
+| Роль          | Логин / пароль         | Возможности                                                                         |
+|---------------|------------------------|-------------------------------------------------------------------------------------|
+| Гость         | без входа              | каталог и сравнение решений; демо-расчёт на /demo (в памяти, ничего не сохраняется) |
+| Пользователь  | `user` / `useruser`    | проекты, параметры, подбор, экономика, имитация, экспорт                            |
+| Администратор | `admin` / `adminadmin` | всё выше + раздел «Управление» (каталог, справочники, импорт)                       |
 
 Регистрация создаёт обычного пользователя; роль администратора
 выдаётся только сидом.
@@ -179,32 +178,18 @@ compose up -d --build`. Повторный `up` прогоняет seed зано
 - `theme/`, `schema-review/`, `schema-redesign/`, `demo_projects/` -
   скриншоты интерфейса (обе темы, схема имитации, демо-проекты).
 
-## Запуск без Docker
-
-```bash
-# 1) БД: docker compose up -d db  (PostgreSQL 16, схема применится Flyway'ем)
-# 2) Backend (JDK 21):
-cd backend
-JWT_SECRET='dev-secret-0123456789-0123456789-0123456789' ./gradlew bootRun
-# 3) Каталог (python 3.12+):
-DATABASE_URL='postgresql+psycopg2://postgres:postgres@localhost:5432/robomatch' \
-  python scripts/seed/run.py
-# 4) Frontend (Node 20+):
-cd frontend && npm install && npm run dev
-```
-
 ## Диагностика
 
-| Симптом | Причина и решение |
-|---|---|
+| Симптом                                               | Причина и решение                                                                                                        |
+|-------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
 | `docker compose up` не стартует: «Задайте JWT_SECRET» | Скопируйте `.env.example` → `.env` и сгенерируйте секрет (`openssl rand -base64 48`) - плейсхолдер отклоняется намеренно |
-| После `git pull` контейнеры на старом коде | `docker compose up` не пересобирает образы: `docker compose up -d --build` |
-| Контейнер seed «Exited (0)» | Норма: одноразовый загрузчик каталога завершился успешно |
-| seed завершился с ошибкой | `docker compose logs seed` - стек ошибки и строка «окружение: …» |
-| Загрузки вложений падают по правам (Linux) | `sudo chown -R 1001:1001 data/` - backend работает от uid 1001 |
-| Каталог пуст, хотя seed прошёл | Проверьте `docker compose logs backend`: Flyway должен применить V1–V7 до старта |
-| 401 на всех API в Swagger | Нажмите Authorize и вставьте JWT из `POST /api/auth/login` |
-| Полный сброс окружения | `docker compose down -v && docker compose up -d --build` |
+| После `git pull` контейнеры на старом коде            | `docker compose up` не пересобирает образы: `docker compose up -d --build`                                               |
+| Контейнер seed «Exited (0)»                           | Норма: одноразовый загрузчик каталога завершился успешно                                                                 |
+| seed завершился с ошибкой                             | `docker compose logs seed` - стек ошибки и строка «окружение: …»                                                         |
+| Загрузки вложений падают по правам (Linux)            | `sudo chown -R 1001:1001 data/` - backend работает от uid 1001                                                           |
+| Каталог пуст, хотя seed прошёл                        | Проверьте `docker compose logs backend`: Flyway должен применить V1–V7 до старта                                         |
+| 401 на всех API в Swagger                             | Нажмите Authorize и вставьте JWT из `POST /api/auth/login`                                                               |
+| Полный сброс окружения                                | `docker compose down -v && docker compose up -d --build`                                                                 |
 
 ## Структура репозитория
 
