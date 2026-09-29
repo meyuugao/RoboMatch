@@ -1,0 +1,36 @@
+services:
+  # Бэкенд
+  - type: web
+    name: robomatch-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: DB_URL
+        fromDatabase:
+          name: robomatch-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true # Render сгенерирует сам
+
+  # Фронтенд
+  - type: web
+    name: robomatch-frontend
+    runtime: docker
+    rootDir: frontend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: robomatch-backend
+          property: host
+
+# База данных
+databases:
+  - name: robomatch-db
+    plan: free
+    databaseName: robomatch
+    user: robomatch_user
