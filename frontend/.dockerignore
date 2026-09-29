@@ -1,8 +1,0 @@
-# Не тащим в Docker-контекст (ускоряет сборку, исключает мусор):
-node_modules
-.next
-.env
-.env.*
-*.log
-npm-debug.log*
-.DS_Store

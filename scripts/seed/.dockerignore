@@ -1,6 +1,0 @@
-# Не тащим в Docker-контекст:
-__pycache__
-*.pyc
-.env
-.pytest_cache
-*.log
